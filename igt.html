@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="only light">
+<meta name="supported-color-schemes" content="light">
+<title>IGT — Iowa Gambling Task</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    color-scheme: light;
+    color-scheme: only light;
+    --sky:#D8E8F3;
+    --paper:#F7F4EC;
+    --ink:#14213A;
+    --ink-soft:#52617C;
+    --green:#2B8A57;
+    --green-dark:#1F6B42;
+    --bad:#C0301C;
+    --line:rgba(20,33,58,.14);
+    --font:'Bricolage Grotesque', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+  html,body{ height:100%; margin:0; }
+  body{
+    font-family:var(--font);
+    color:var(--ink);
+    background:var(--sky);
+    font-variant-numeric:tabular-nums;
+    -webkit-text-size-adjust:100%;
+  }
+
+  /* shared clouds */
+  .cloud{ position:absolute; background:#fff; opacity:.75; border-radius:999px; height:34px; width:120px; pointer-events:none; }
+  .cloud::before,.cloud::after{ content:""; position:absolute; background:#fff; border-radius:50%; }
+  .cloud::before{ width:56px; height:56px; left:18px; top:-26px; }
+  .cloud::after{ width:42px; height:42px; left:62px; top:-16px; }
+  .cloud.c1{ left:6%;  top:14%; }
+  .cloud.c2{ right:8%; top:30%; transform:scale(.8); }
+  .cloud.c3{ left:14%; top:66%; transform:scale(.6); opacity:.6; }
+
+  /* shared big button */
+  .btn{
+    font-family:var(--font);
+    font-size:20px;
+    font-weight:700;
+    height:64px;
+    width:100%;
+    border:0;
+    border-radius:16px;
+    cursor:pointer;
+    color:#fff;
+    background:var(--ink);
+    touch-action:manipulation;
+    user-select:none; -webkit-user-select:none;
+    transition:transform .05s ease, filter .15s ease;
+  }
+  .btn:active{ transform:translateY(2px); }
+  .btn:hover{ filter:brightness(1.25); }
+  .btn:focus-visible{ outline:3px solid var(--ink); outline-offset:3px; }
+  .btn-ghost{ background:transparent; color:var(--ink); border:2px solid var(--ink); height:52px; font-size:17px; }
+  .btn-ghost:hover{ filter:none; background:rgba(20,33,58,.06); }
+
+  /* ---------- intro / instructions ---------- */
+  .intro{
+    position:relative;
+    min-height:100vh; min-height:100dvh;
+    display:flex; align-items:center; justify-content:center;
+    padding:calc(24px + env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom));
+    overflow:hidden;
+  }
+  .intro-card{
+    position:relative; z-index:1;
+    width:100%; max-width:560px;
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:30px 34px 28px 36px;
+    padding:28px 24px 24px;
+  }
+  .mini-decks{ display:flex; gap:10px; margin-bottom:18px; }
+  .mini{
+    width:44px; height:58px; border-radius:11px;
+    display:grid; place-items:center;
+    font-weight:800; font-size:24px; color:#fff;
+  }
+  .mini.a{ background:#E5533D; transform:rotate(-7deg); }
+  .mini.b{ background:#F2B33D; color:var(--ink); transform:rotate(-2deg) translateY(3px); }
+  .mini.c{ background:#2BA39B; transform:rotate(3deg); }
+  .mini.d{ background:#7B5CC4; transform:rotate(8deg) translateY(2px); }
+  .intro h1{ margin:0 0 6px; font-size:36px; letter-spacing:-.015em; line-height:1.05; }
+  .intro .lead{ margin:0 0 20px; font-size:18px; color:var(--ink-soft); }
+  .steps{ list-style:none; margin:0 0 24px; padding:0; display:grid; gap:12px; }
+  .steps li{ display:flex; gap:12px; align-items:flex-start; font-size:17px; line-height:1.35; }
+  .steps .n{
+    flex:none; width:30px; height:30px; display:grid; place-items:center;
+    border-radius:60% 40% 55% 45% / 50% 55% 45% 50%;
+    font-weight:800; font-size:15px; color:#fff;
+  }
+  .steps li:nth-child(1) .n{ background:#E5533D; }
+  .steps li:nth-child(2) .n{ background:#F2B33D; color:var(--ink); }
+  .steps li:nth-child(3) .n{ background:#2BA39B; }
+  .steps li:nth-child(4) .n{ background:#7B5CC4; }
+  .steps li:nth-child(5) .n{ background:var(--ink); }
+
+  /* ---------- task screen ---------- */
+  .app{
+    display:none;
+    height:100vh; height:100dvh;
+    flex-direction:column;
+    background:var(--sky);
+  }
+
+  .hud{
+    display:flex; justify-content:space-between; align-items:flex-end;
+    padding:calc(14px + env(safe-area-inset-top)) 20px 6px;
+    position:relative; z-index:2;
+  }
+  .hud-label{ display:block; font-size:13px; font-weight:500; color:var(--ink-soft); }
+  .hud-value{ display:block; font-size:26px; font-weight:700; line-height:1.1; }
+  .hud .right{ text-align:right; }
+  .hud .of{ font-weight:500; color:var(--ink-soft); font-size:20px; }
+  #balance.neg{ color:var(--bad); }
+  #balance.flash-up{ animation:flashUp .7s; }
+  #balance.flash-down{ animation:flashDown .7s; }
+  @keyframes flashUp{ 0%{ color:var(--green); transform:scale(1.12); } 100%{ transform:scale(1); } }
+  @keyframes flashDown{ 0%{ color:var(--bad); transform:scale(1.12); } 100%{ transform:scale(1); } }
+  #balance{ transform-origin:right center; display:block; }
+
+  .stage{ position:relative; flex:1; min-height:0; overflow:hidden; padding:0 10px; }
+  .decks{
+    position:relative; z-index:1;
+    height:100%;
+    max-width:1080px; margin:0 auto;
+    padding:6px 2px 10px;
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-template-rows:repeat(2,minmax(0,1fr));
+    gap:2px 8px;
+  }
+  @media (min-aspect-ratio:11/10){
+    .decks{ grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:minmax(0,1fr); }
+  }
+
+  .deck{
+    appearance:none; -webkit-appearance:none;
+    background:none; border:0; padding:0; margin:0;
+    min-width:0; min-height:0; display:block;
+    cursor:pointer; border-radius:26px;
+    touch-action:manipulation;
+    user-select:none; -webkit-user-select:none;
+    transition:opacity .2s ease;
+  }
+  .deck svg{ width:100%; height:100%; display:block; overflow:visible; transition:transform .15s ease; }
+  .deck svg text{ font-family:var(--font); }
+  .deck .top{ transform-box:fill-box; transform-origin:center; }
+  .deck:focus-visible{ outline:3px solid var(--ink); outline-offset:2px; }
+  .deck:active svg{ transform:scale(.97); }
+  @media (hover:hover){ .deck:hover svg{ transform:translateY(-4px); } .app.busy .deck:hover svg{ transform:none; } }
+  .app.busy .deck{ cursor:default; }
+  .app.busy .deck:not(.active){ opacity:.5; }
+
+  .dock{
+    background:var(--paper);
+    border-top:1px solid var(--line);
+    padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+  }
+  .dock-inner{ max-width:760px; margin:0 auto; display:grid; gap:12px; }
+  .status{ min-height:22px; text-align:center; font-size:16px; font-weight:500; color:var(--ink-soft); }
+  .status.bad{ color:var(--bad); font-weight:600; }
+  .status.good{ color:var(--green-dark); font-weight:600; }
+  .readouts{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .readout{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:10px 14px; }
+  .readout .lbl{ display:block; font-size:13px; font-weight:500; color:var(--ink-soft); }
+  .readout .val{ display:block; font-size:28px; font-weight:700; line-height:1.15; }
+  .readout.win .val{ color:var(--green-dark); }
+  .readout.lose .val{ color:var(--bad); }
+
+  @media (max-height:560px){
+    .hud-value{ font-size:20px; }
+    .readouts{ display:none; }
+    .status{ min-height:0; }
+    .dock{ padding-top:8px; padding-bottom:calc(8px + env(safe-area-inset-bottom)); }
+  }
+
+  .float-amt{
+    position:fixed; left:0; top:0; z-index:40;
+    font-family:var(--font); font-size:28px; font-weight:800;
+    pointer-events:none; white-space:nowrap;
+    text-shadow:0 2px 0 rgba(255,255,255,.8);
+  }
+  .float-amt.win{ color:var(--green-dark); }
+  .float-amt.loss{ color:var(--bad); }
+
+  /* ---------- summary ---------- */
+  .summary{ display:none; min-height:100vh; min-height:100dvh; padding:32px 20px 48px; background:var(--sky); }
+  .summary-inner{ max-width:760px; margin:0 auto; }
+  .summary h1{ font-size:34px; margin:0 0 4px; letter-spacing:-.01em; }
+  .summary .sub{ margin:0 0 24px; color:var(--ink-soft); font-size:17px; }
+  .summary-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:24px; }
+  .stat{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:16px; }
+  .stat .val{ display:block; font-size:32px; font-weight:800; line-height:1.1; }
+  .stat .lbl{ display:block; margin-top:4px; font-size:14px; color:var(--ink-soft); font-weight:500; }
+  @media (max-width:520px){
+    .summary-grid{ grid-template-columns:1fr; }
+    .stat{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+    .stat .lbl{ margin-top:0; text-align:right; }
+  }
+  .table-wrap{ background:#fff; border:1px solid var(--line); border-radius:16px; overflow:auto; margin-bottom:10px; }
+  table{ width:100%; border-collapse:collapse; font-size:16px; }
+  th,td{ text-align:left; padding:10px 14px; white-space:nowrap; }
+  thead th{ background:var(--paper); font-size:13px; font-weight:600; color:var(--ink-soft); border-bottom:1px solid var(--line); }
+  tbody tr + tr td{ border-top:1px solid var(--line); }
+  tbody tr.total td{ font-weight:700; background:var(--paper); }
+  td.pos{ color:var(--green-dark); font-weight:600; }
+  td.neg{ color:var(--bad); font-weight:600; }
+  .note{ font-size:14px; color:var(--ink-soft); margin:0 0 22px; }
+  .summary-actions{ display:grid; gap:12px; }
+  .hint{ text-align:center; font-size:14px; color:var(--ink-soft); }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition:none !important; animation:none !important; }
+  }
+
+  /* ---------- touch safety + mute button ---------- */
+  .app{ -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  .mute{
+    display:grid; place-items:center;
+    width:42px; height:42px; padding:0;
+    margin:6px 0 0 auto;
+    border:1.5px solid var(--line);
+    border-radius:50%;
+    background:rgba(255,255,255,.6);
+    color:var(--ink);
+    cursor:pointer;
+    touch-action:manipulation;
+  }
+  .mute svg{ width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .mute .x{ display:none; }
+  .mute[aria-pressed="true"] .waves{ display:none; }
+  .mute[aria-pressed="true"] .x{ display:inline; }
+  .mute:focus-visible{ outline:3px solid var(--ink); outline-offset:2px; }
+  @media (max-height:560px){ .mute{ width:34px; height:34px; margin-top:4px; } .mute svg{ width:18px; height:18px; } }
+</style>
+</head>
+<body>
+
+<!-- ================= INSTRUCTIONS ================= -->
+<div class="intro" id="introView">
+  <div class="cloud c1"></div>
+  <div class="cloud c2"></div>
+  <div class="cloud c3"></div>
+  <div class="intro-card">
+    <div class="mini-decks" aria-hidden="true">
+      <span class="mini a">A</span><span class="mini b">B</span><span class="mini c">C</span><span class="mini d">D</span>
+    </div>
+    <h1>Pick a card</h1>
+    <p class="lead">Four decks are waiting. Finish with as much money as you can.</p>
+    <ol class="steps">
+      <li><span class="n">1</span><span>Tap a deck to turn over its top card. You can switch decks whenever you like, as often as you like.</span></li>
+      <li><span class="n">2</span><span>Every card wins you some money. Now and then a card also takes some away.</span></li>
+      <li><span class="n">3</span><span>You start with <b id="introStart">$2,000</b> of play money.</span></li>
+      <li><span class="n">4</span><span>Some decks are better than others. Try to stick with the ones that do best for you.</span></li>
+      <li><span class="n">5</span><span>The game ends by itself, so keep playing until it tells you to stop.</span></li>
+    </ol>
+    <button class="btn" id="btnStart">Start</button>
+  </div>
+</div>
+
+<!-- ================= TASK ================= -->
+<div class="app" id="app">
+  <header class="hud">
+    <div>
+      <span class="hud-label">Card</span>
+      <span class="hud-value"><span id="trialNum">1</span><span class="of" id="trialOf"></span></span>
+    </div>
+    <div class="right">
+      <span class="hud-label">Balance</span>
+      <span class="hud-value" id="balance">$2,000</span>
+      <button class="mute" id="btnMute" type="button" aria-pressed="false" aria-label="Mute sound" title="Mute sound">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 H8 L13 5.5 V18.5 L8 14.5 H4 Z"/><path class="waves" d="M16 9 C 17.6 10.4, 17.6 13.6, 16 15"/><path class="waves" d="M18.8 6.6 C 21.6 9.4, 21.6 14.6, 18.8 17.4"/><path class="x" d="M16.5 9.5 L21.5 14.5 M21.5 9.5 L16.5 14.5"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <div class="cloud c1"></div>
+    <div class="cloud c2"></div>
+    <div class="cloud c3"></div>
+    <div class="decks" id="decks"></div>
+  </main>
+
+  <section class="dock">
+    <div class="dock-inner">
+      <div class="status" id="logLine">Choose a card from any deck.</div>
+      <div class="readouts">
+        <div class="readout win"><span class="lbl">Last card won</span><span class="val" id="lastWin">—</span></div>
+        <div class="readout lose"><span class="lbl">Last card lost</span><span class="val" id="lastLoss">—</span></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ================= SUMMARY ================= -->
+<div class="summary" id="summaryView">
+  <div class="summary-inner">
+    <h1 id="sumTitle">Session complete</h1>
+    <p class="sub" id="sumSub">All cards played.</p>
+
+    <div id="sumDetail">
+      <div class="summary-grid">
+        <div class="stat"><span class="val" id="sumBalance">$0</span><span class="lbl">Final balance</span></div>
+        <div class="stat"><span class="val" id="sumNet">0</span><span class="lbl">Net score (C + D − A − B)</span></div>
+        <div class="stat"><span class="val" id="sumGood">0%</span><span class="lbl">Picks from C and D</span></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Block</th><th>A</th><th>B</th><th>C</th><th>D</th><th>Net score</th></tr></thead>
+          <tbody id="logBody"></tbody>
+        </table>
+      </div>
+      <p class="note">Each block is 20 cards. Net score is picks from C and D minus picks from A and B.</p>
+    </div>
+
+    <div class="summary-actions">
+      <button class="btn btn-ghost" id="btnCopyJson">Copy session JSON</button>
+      <div class="hint" id="copyHint">window.__igtSession holds the full trial log</div>
+      <button class="btn btn-restart" id="btnNext" style="background:var(--green)">Continue to the next task</button>
+      <button class="btn" id="btnRestart">Run again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   CONFIG
+   ========================================================= */
+const CONFIG = {
+  numTrials: 100,               // classic IGT: 100 card selections
+  startingBalance: 2000,        // classic $2,000 play-money loan
+  blockSize: 20,                // 5 blocks of 20 for the net-score breakdown
+  revealMs: 800,                // how long a turned-over card stays up before the next choice
+  randomizeDeckPositions: false,// false = A B C D left to right (classic); true = shuffled each session
+  showTotalCards: true,         // shows "Card 12 of 100" (the original task does not tell players the total)
+  showResultsToParticipant: true, // false = end screen shows only a thank-you
+
+  // Paste your Google Apps Script Web App URL here to log data to a Sheet.
+  // Leave blank to run purely local (data still lands in window.__igtSession).
+  sheetWebhookUrl: 'https://script.google.com/macros/s/AKfycbwkJ7Y27iKRwoU622JumLArOz6H1vG-X4MHbzoZ-ldQtYezL5zbU7yseV-r9Oy8tbBG/exec',
+
+  // Page opened by the "Continue" button on the end screen ('' hides the button).
+  // The session id travels with it (?sid=...), so one participant's rows from all
+  // three tasks share the same session_id in the Sheet.
+  nextPage: 'two-step.html',
+
+  // The end screen offers \"Run again\" only if this is true. Leave it off for real participants.
+  allowRunAgain: false,
+};
+
+/* Classic payoff structure. Every block of 10 cards from a deck contains exactly
+   these losses (amounts and counts), in random positions within the block.
+     A: +100/card, 5 losses totalling 1250  -> net -250 per 10 cards
+     B: +100/card, 1 loss of 1250           -> net -250 per 10 cards
+     C: +50/card,  5 losses totalling 250   -> net +250 per 10 cards
+     D: +50/card,  1 loss of 250            -> net +250 per 10 cards  */
+const DECKS = {
+  A: { win:100, losses:[150, 200, 250, 300, 350], advantageous:0 },
+  B: { win:100, losses:[1250],                    advantageous:0 },
+  C: { win:50,  losses:[25, 75, 50, 25, 75],      advantageous:1 },
+  D: { win:50,  losses:[250],                     advantageous:1 },
+};
+const DECK_IDS = ['A', 'B', 'C', 'D'];
+
+function newSessionId(){
+  return (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : 'session-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+}
+let SESSION_ID = (typeof location !== 'undefined' && new URLSearchParams(location.search).get('sid')) || newSessionId();   // regenerated on every "Run again"
+
+/* =========================================================
+   SPREADSHEET / EXTERNAL INTEGRATION
+   ========================================================= */
+function onTrialComplete(trial) {
+  sendToSheet({ task: 'igt', eventType: 'trial', ...trial });
+}
+
+function onSessionComplete(session) {
+  logReconcile(session);
+  sendToSheet({
+    task: 'igt',
+    eventType: 'session_summary',
+    sessionId: session.sessionId,
+    timestamp: new Date().toISOString(),
+    totalTrials: CONFIG.numTrials,
+    finalBalance: session.finalBalance,
+    netScore: session.netScore,
+    blockNetScores: session.blockNetScores,
+    picks: session.picks,
+  });
+}
+
+/* =========================================================
+   RELIABLE LOGGING
+   Every row gets a unique rowId and waits in a queue that is also saved in the
+   browser. Rows are sent in batches, one request at a time, and leave the queue
+   only when the server confirms it stored them. Anything else is retried with
+   growing delays, including after a reload or on the next task page. The server
+   ignores rowIds it already has, so a retry can never create a duplicate row.
+   ========================================================= */
+const BUILD = '2026-10-24b';          // shows up in the sheet (page_build) so you can see which version each participant ran
+const TASK_NAME = 'igt';
+const LOG = {
+  key: 'taskLog.queue.v1', queue: [], sending: false, fails: 0, readFails: 0, blind: false,
+  timer: null, lastAttempt: 0,
+  batchSize: 40, timeoutMs: 40000, baseDelayMs: 1500, maxDelayMs: 30000,
+};
+function newRunId(){ return Math.random().toString(36).slice(2, 10); }
+let RUN_ID = newRunId();            // new on every page load / run, so a replay is never mistaken for a duplicate
+
+function logSave(){ try { localStorage.setItem(LOG.key, JSON.stringify(LOG.queue)); } catch (e) {} }
+function logLoad(){
+  try {
+    const saved = JSON.parse(localStorage.getItem(LOG.key) || '[]');
+    if (Array.isArray(saved)) saved.forEach(p => {
+      if (p && p.rowId && !LOG.queue.some(q => q.rowId === p.rowId)) LOG.queue.push(p);
+    });
+  } catch (e) {}
+}
+function rowKey(p){
+  return [p.sessionId, RUN_ID, p.task, p.eventType, (p.balloonIndex ?? p.trial ?? 'summary')].join('|');
+}
+
+function sendToSheet(payload) {
+  if (!CONFIG.sheetWebhookUrl) return;
+  payload.build = BUILD;
+  payload.rowId = rowKey(payload);
+  if (!LOG.queue.some(q => q.rowId === payload.rowId)) LOG.queue.push(payload);
+  logSave();
+  logFlush();
+}
+
+async function logPost(batch){
+  const body = JSON.stringify({ batch });
+  const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  const t = ctl ? setTimeout(() => ctl.abort(), LOG.timeoutMs) : null;
+  try {
+    const opts = {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // plain text avoids a CORS preflight Apps Script can't answer
+      body,
+    };
+    if (ctl) opts.signal = ctl.signal;
+    if (LOG.blind){                                              // fallback: reply can't be read, so "sent" counts as success
+      opts.mode = 'no-cors';
+      await fetch(CONFIG.sheetWebhookUrl, opts);
+      return { ok: true };
+    }
+    const res = await fetch(CONFIG.sheetWebhookUrl, opts);
+    const data = await res.json();                               // throws if the reply is not readable JSON
+    LOG.readFails = 0;
+    // Only a reply that proves the NEW script handled this exact batch counts as saved. An outdated script
+    // answers {status:'ok'} to anything, which would make the page throw its data away.
+    const confirmed = !!data && data.status === 'ok' && data.v >= 2 && (data.stored + data.duplicates) === batch.length;
+    if (data && data.status === 'ok' && !confirmed && !LOG.warned) {
+      LOG.warned = true;
+      console.warn('The logging endpoint is running an outdated script. Rows are being kept in the browser until it is updated.');
+    }
+    return { ok: confirmed };
+  } finally { if (t) clearTimeout(t); }
+}
+
+async function logFlush(){
+  if (!CONFIG.sheetWebhookUrl || LOG.sending || !LOG.queue.length) return;
+  LOG.sending = true;
+  LOG.lastAttempt = Date.now();
+  const batch = LOG.queue.slice(0, LOG.batchSize);
+  let ok = false, threw = false;
+  try { ok = (await logPost(batch)).ok; } catch (e) { threw = true; }
+  LOG.sending = false;
+  if (ok){
+    const sent = new Set(batch.map(p => p.rowId));
+    LOG.queue = LOG.queue.filter(p => !sent.has(p.rowId));
+    LOG.fails = 0;
+    logSave();
+    if (LOG.queue.length) logFlush();
+    return;
+  }
+  LOG.fails++;
+  if (threw && !LOG.blind){
+    LOG.readFails++;
+    // Several unreadable replies in a row while the device is online: the browser probably can't read
+    // the server's reply at all. Fall back to send-and-assume (plus the end-of-run re-send below).
+    if (LOG.readFails >= 3 && navigator.onLine !== false) LOG.blind = true;
+  }
+  const wait = Math.min(LOG.maxDelayMs, LOG.baseDelayMs * Math.pow(2, Math.min(LOG.fails - 1, 5)));
+  clearTimeout(LOG.timer);
+  LOG.timer = setTimeout(logFlush, wait);
+}
+
+function logDrain(maxMs){            // resolves true when everything is saved, false if time ran out
+  return new Promise(resolve => {
+    const t0 = Date.now();
+    (function check(){
+      if (!LOG.queue.length) return resolve(true);
+      if (Date.now() - t0 > maxMs) return resolve(false);
+      if (!LOG.sending && Date.now() - LOG.lastAttempt > 800) logFlush();
+      setTimeout(check, 200);
+    })();
+  });
+}
+
+function logBeacon(){                // last-chance send when the page is being hidden or closed
+  if (!CONFIG.sheetWebhookUrl || !LOG.queue.length || !navigator.sendBeacon) return;
+  try {
+    navigator.sendBeacon(CONFIG.sheetWebhookUrl,
+      new Blob([JSON.stringify({ batch: LOG.queue.slice(0, LOG.batchSize) })], { type: 'text/plain;charset=UTF-8' }));
+  } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') logBeacon(); else logFlush(); });
+window.addEventListener('pagehide', logBeacon);
+window.addEventListener('online', logFlush);
+logLoad();
+setTimeout(logFlush, 500);           // resend anything left over from an interrupted run or an earlier page
+
+/* At the end of a run, send every trial row once more. Rows the server already has are ignored
+   (matched by rowId), so this only fills in anything that never arrived. */
+function logReconcile(session){
+  (session.trials || []).forEach(t => sendToSheet({ task: TASK_NAME, eventType: 'trial', ...t }));
+  setTimeout(() => {                 // runs after the summary row has been queued too
+    if (CONFIG.nextPage) return;     // when a Continue button exists it waits for the queue itself
+    logDrain(20000).then((ok) => {
+      if (window.__endNote) window.__endNote.textContent = ok
+        ? 'Everything is saved. Thank you for taking part.'
+        : 'Your answers are still being saved. Please keep this page open for a few more seconds. Thank you for taking part.';
+    });
+  }, 0);
+}
+
+/* =========================================================
+   RANDOMNESS (CSPRNG with rejection sampling: no modulo bias)
+   ========================================================= */
+function randInt(n){
+  const cryptoObj = (typeof crypto !== 'undefined' && crypto.getRandomValues) ? crypto : null;
+  if (!cryptoObj) return Math.floor(Math.random() * n);
+  const limit = Math.floor(0x100000000 / n) * n;
+  const buf = new Uint32Array(1);
+  let x;
+  do { cryptoObj.getRandomValues(buf); x = buf[0]; } while (x >= limit);
+  return x % n;
+}
+
+function shuffle(arr){
+  for (let i = arr.length - 1; i > 0; i--){
+    const j = randInt(i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/* One block of 10 cards for a deck: fixed win, losses placed at random slots. */
+function makeBlock(deckId){
+  const { win, losses } = DECKS[deckId];
+  const slots = shuffle([0,1,2,3,4,5,6,7,8,9]);
+  const amounts = shuffle(losses.slice());
+  const lossAt = {};
+  amounts.forEach((amt, i) => { lossAt[slots[i]] = amt; });
+  return Array.from({ length: 10 }, (_, i) => ({ win, loss: lossAt[i] || 0 }));
+}
+
+function drawFrom(deckId){
+  if (!state.queues[deckId].length) state.queues[deckId] = makeBlock(deckId);
+  return state.queues[deckId].shift();
+}
+
+/* =========================================================
+   STATE
+   ========================================================= */
+let state;
+function freshState(){
+  return {
+    completed: 0,                 // cards finished so far
+    balance: CONFIG.startingBalance,
+    busy: false,
+    finished: false,
+    readyAt: 0,
+    deckOrder: CONFIG.randomizeDeckPositions ? shuffle(DECK_IDS.slice()) : DECK_IDS.slice(),
+    queues: { A:[], B:[], C:[], D:[] },
+    picks: { A:0, B:0, C:0, D:0 },
+    trials: [],
+  };
+}
+state = freshState();
+
+const $ = (id) => document.getElementById(id);
+const els = {
+  introView: $('introView'), app: $('app'), summaryView: $('summaryView'),
+  introStart: $('introStart'), btnStart: $('btnStart'),
+  trialNum: $('trialNum'), trialOf: $('trialOf'), balance: $('balance'),
+  decks: $('decks'), logLine: $('logLine'), lastWin: $('lastWin'), lastLoss: $('lastLoss'),
+  sumTitle: $('sumTitle'), sumSub: $('sumSub'), sumDetail: $('sumDetail'),
+  sumBalance: $('sumBalance'), sumNet: $('sumNet'), sumGood: $('sumGood'),
+  logBody: $('logBody'), btnCopyJson: $('btnCopyJson'), copyHint: $('copyHint'), btnRestart: $('btnRestart'),
+};
+let deckEls = {};
+
+const REDUCED = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+const dur = (n) => REDUCED ? 0 : n;
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+/* =========================================================
+   MONEY FORMATTING
+   ========================================================= */
+function fmt(n){
+  const s = Math.abs(Math.round(n)).toLocaleString('en-US');
+  return (n < 0 ? '\u2212' : '') + '$' + s;
+}
+
+/* =========================================================
+   DECK ART  (viewBox 160 x 210, scales to fit its grid cell)
+   ========================================================= */
+const DECK_STYLE = {
+  A: { main:'#E5533D', dark:'#B93A28', tint:'rgba(229,83,61,.22)',  ink:'#FFFFFF',
+       blob:'M34 62 C 14 28, 78 8, 122 26 C 158 42, 158 118, 140 158 C 120 200, 54 206, 28 170 C 8 138, 48 100, 34 62 Z' },
+  B: { main:'#F2B33D', dark:'#C98D1B', tint:'rgba(242,179,61,.30)', ink:'#14213A',
+       blob:'M22 92 C 16 44, 66 12, 112 20 C 154 28, 156 92, 146 138 C 134 188, 76 204, 38 176 C 14 156, 24 122, 22 92 Z' },
+  C: { main:'#2BA39B', dark:'#1B7A73', tint:'rgba(43,163,155,.24)', ink:'#FFFFFF',
+       blob:'M36 44 C 70 12, 130 18, 146 62 C 160 104, 140 146, 130 172 C 112 206, 50 200, 26 160 C 6 120, 14 72, 36 44 Z' },
+  D: { main:'#7B5CC4', dark:'#5A3FA0', tint:'rgba(123,92,196,.24)', ink:'#FFFFFF',
+       blob:'M46 30 C 90 6, 148 36, 146 86 C 144 126, 156 148, 132 178 C 100 208, 44 196, 24 150 C 8 112, 18 58, 46 30 Z' },
+};
+
+function deckSvg(id){
+  const s = DECK_STYLE[id];
+  return `<svg viewBox="0 0 160 210" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+    <path d="${s.blob}" fill="${s.tint}"/>
+    <ellipse cx="80" cy="192" rx="46" ry="7" fill="rgba(20,33,58,.14)"/>
+    <rect x="26" y="34" width="108" height="146" rx="16" fill="${s.dark}" transform="rotate(-5 80 107)"/>
+    <rect x="26" y="34" width="108" height="146" rx="16" fill="${s.dark}" opacity=".7" transform="rotate(4 80 107)"/>
+    <g class="top">
+      <g class="face-down">
+        <rect x="26" y="30" width="108" height="146" rx="16" fill="${s.main}"/>
+        <rect x="34" y="38" width="92" height="130" rx="11" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="2"/>
+        <circle cx="48" cy="52" r="5" fill="#fff" fill-opacity=".5"/>
+        <circle cx="112" cy="154" r="5" fill="#fff" fill-opacity=".5"/>
+        <text x="80" y="121" text-anchor="middle" font-size="64" font-weight="800" fill="${s.ink}">${id}</text>
+      </g>
+      <g class="face-up" style="display:none">
+        <rect x="26" y="30" width="108" height="146" rx="16" fill="#FFFDF7" stroke="${s.main}" stroke-width="5"/>
+        <text class="r-win"  x="80" y="104" text-anchor="middle" font-size="32" font-weight="800" fill="#1F6B42"></text>
+        <text class="r-loss" x="80" y="146" text-anchor="middle" font-size="32" font-weight="800" fill="#C0301C"></text>
+      </g>
+    </g>
+  </svg>`;
+}
+
+function buildDecks(){
+  els.decks.innerHTML = '';
+  deckEls = {};
+  state.deckOrder.forEach((id) => {
+    const btn = document.createElement('button');
+    btn.className = 'deck';
+    btn.type = 'button';
+    btn.setAttribute('aria-label', 'Deck ' + id);
+    btn.innerHTML = deckSvg(id);
+    btn.addEventListener('click', () => pick(id));
+    els.decks.appendChild(btn);
+    deckEls[id] = {
+      btn,
+      top:  btn.querySelector('.top'),
+      down: btn.querySelector('.face-down'),
+      up:   btn.querySelector('.face-up'),
+      win:  btn.querySelector('.r-win'),
+      loss: btn.querySelector('.r-loss'),
+    };
+  });
+}
+
+/* Flip the top card between face-down and face-up (a squash-and-expand). */
+async function flip(deckId, toUp){
+  const d = deckEls[deckId];
+  const lift = toUp ? 'translateY(-8px)' : 'translateY(0)';
+  const from = toUp ? 'translateY(0) scaleX(1)' : 'translateY(-8px) scaleX(1)';
+  await d.top.animate(
+    [{ transform: from }, { transform: `${toUp ? 'translateY(-8px)' : 'translateY(-4px)'} scaleX(0)` }],
+    { duration: dur(150), easing: 'ease-in', fill: 'forwards' }
+  ).finished;
+  d.down.style.display = toUp ? 'none' : '';
+  d.up.style.display   = toUp ? '' : 'none';
+  await d.top.animate(
+    [{ transform: `${toUp ? 'translateY(-8px)' : 'translateY(-4px)'} scaleX(0)` }, { transform: `${lift} scaleX(1)` }],
+    { duration: dur(180), easing: 'ease-out', fill: 'forwards' }
+  ).finished;
+  d.top.getAnimations().forEach(a => a.cancel());   // settle: clear fill so the next flip starts clean
+  if (toUp) d.top.style.transform = 'translateY(-8px)';
+  else d.top.style.transform = '';
+}
+
+/* =========================================================
+   MUTE + TOUCH SAFETY
+   ========================================================= */
+let MUTED = (function(){
+  try {
+    const q = new URLSearchParams(location.search).get('mute');   // carried over from the previous task
+    if (q === '1') return true;
+    if (q === '0') return false;
+    return sessionStorage.getItem('task.muted') === '1';
+  } catch (e) { return false; }
+})();
+let masterGain = null;
+function dest(c){                       // every sound goes through this one volume control
+  if (!masterGain){ masterGain = c.createGain(); masterGain.gain.value = MUTED ? 0 : 1; masterGain.connect(c.destination); }
+  return masterGain;
+}
+const btnMute = document.getElementById('btnMute');
+function renderMute(){
+  btnMute.setAttribute('aria-pressed', MUTED ? 'true' : 'false');
+  btnMute.setAttribute('aria-label', MUTED ? 'Unmute sound' : 'Mute sound');
+  btnMute.setAttribute('title', MUTED ? 'Unmute sound' : 'Mute sound');
+}
+function setMuted(m){
+  MUTED = m;
+  if (masterGain) masterGain.gain.value = m ? 0 : 1;
+  try { sessionStorage.setItem('task.muted', m ? '1' : '0'); } catch (e) {}
+  if (!m) { try { ctx(); } catch (e) {} }          // unmuting is a tap, so it also unlocks audio on iOS
+  renderMute();
+}
+btnMute.addEventListener('click', () => setMuted(!MUTED));
+renderMute();
+
+/* Stop accidental double-tap zoom. CSS (touch-action) handles most browsers; this also covers
+   iOS Safari taps that land on text, empty space or a disabled button. A tap on a live button is
+   never touched, so rapid pumping / choosing is unaffected. Pinch-zoom stays available. */
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  const now = Date.now();
+  const btn = e.target && e.target.closest ? e.target.closest('button') : null;
+  if (now - lastTouchEnd < 350 && (!btn || btn.disabled)) e.preventDefault();
+  lastTouchEnd = now;
+}, { passive: false });
+
+/* =========================================================
+   SOUND (synthesized, no external assets)
+   ========================================================= */
+let audioCtx = null;
+function ctx(){
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended' && audioCtx.resume) audioCtx.resume();
+  return audioCtx;
+}
+
+function tone(freq, start, len, type, vol){
+  const c = ctx();
+  const t0 = c.currentTime + start;
+  const osc = c.createOscillator();
+  const gain = c.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.001, t0);
+  gain.gain.linearRampToValueAtTime(vol, t0 + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, t0 + len);
+  osc.connect(gain).connect(dest(c));
+  osc.start(t0);
+  osc.stop(t0 + len + 0.02);
+}
+
+function playFlip(){            // soft paper flick
+  const c = ctx();
+  const len = Math.max(1, Math.floor(c.sampleRate * 0.06));
+  const buffer = c.createBuffer(1, len, c.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+  const src = c.createBufferSource();
+  src.buffer = buffer;
+  const hp = c.createBiquadFilter();
+  hp.type = 'highpass'; hp.frequency.value = 1800;
+  const gain = c.createGain();
+  gain.gain.value = 0.2;
+  src.connect(hp).connect(gain).connect(dest(c));
+  src.start();
+}
+
+function playWin(delay = 0){    // bright two-note rise
+  tone(523.25, delay,        0.20, 'sine', 0.16);
+  tone(783.99, delay + 0.09, 0.28, 'sine', 0.16);
+}
+
+function playLoss(amount, delay = 0){   // low descending thud; heavier for big losses
+  const c = ctx();
+  const t0 = c.currentTime + delay;
+  const osc = c.createOscillator();
+  const lp = c.createBiquadFilter();
+  const gain = c.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(230, t0);
+  osc.frequency.exponentialRampToValueAtTime(80, t0 + 0.3);
+  lp.type = 'lowpass'; lp.frequency.value = 700;
+  gain.gain.setValueAtTime(0.3, t0);
+  gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.34);
+  osc.connect(lp).connect(gain).connect(dest(c));
+  osc.start(t0);
+  osc.stop(t0 + 0.36);
+  if (amount >= 1000){
+    const len = Math.max(1, Math.floor(c.sampleRate * 0.5));
+    const buffer = c.createBuffer(1, len, c.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    const n = c.createBufferSource();
+    n.buffer = buffer;
+    const nlp = c.createBiquadFilter();
+    nlp.type = 'lowpass'; nlp.frequency.value = 400;
+    const ng = c.createGain();
+    ng.gain.value = 0.35;
+    n.connect(nlp).connect(ng).connect(dest(c));
+    n.start(t0);
+  }
+}
+
+function playFinish(){          // little rising arpeggio
+  [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, i * 0.12, 0.35, 'sine', 0.14));
+}
+
+/* =========================================================
+   FEEDBACK HELPERS
+   ========================================================= */
+function setStatus(text, kind){
+  els.logLine.className = 'status' + (kind ? ' ' + kind : '');
+  els.logLine.textContent = text;
+}
+
+function renderHud(){
+  const n = Math.min(state.completed + 1, CONFIG.numTrials);
+  els.trialNum.textContent = n;
+  els.trialOf.textContent = CONFIG.showTotalCards ? ' of ' + CONFIG.numTrials : '';
+  els.balance.textContent = fmt(state.balance);
+  els.balance.classList.toggle('neg', state.balance < 0);
+}
+
+function tweenBalance(from, to){
+  if (REDUCED || from === to){ els.balance.textContent = fmt(to); els.balance.classList.toggle('neg', to < 0); return; }
+  const start = performance.now(), ms = 550;
+  (function step(now){
+    const t = Math.min(1, (now - start) / ms);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const v = from + (to - from) * eased;
+    els.balance.textContent = fmt(v);
+    els.balance.classList.toggle('neg', v < 0);
+    if (t < 1) requestAnimationFrame(step);
+  })(start);
+}
+
+function flashBalance(up){
+  els.balance.classList.remove('flash-up', 'flash-down');
+  void els.balance.offsetWidth;                 // restart the animation
+  els.balance.classList.add(up ? 'flash-up' : 'flash-down');
+}
+
+function floatMoney(deckId, win, loss){
+  if (REDUCED) return;
+  const from = deckEls[deckId].btn.getBoundingClientRect();
+  const to = els.balance.getBoundingClientRect();
+  const items = [];
+  if (win)  items.push({ text: '+' + fmt(win),               cls: 'win' });
+  if (loss) items.push({ text: '\u2212' + fmt(loss),         cls: 'loss' });
+  items.forEach((it, i) => {
+    const el = document.createElement('div');
+    el.className = 'float-amt ' + it.cls;
+    el.textContent = it.text;
+    document.body.appendChild(el);
+    const x0 = from.left + from.width / 2;
+    const y0 = from.top + from.height * 0.30 + i * 34;
+    const x1 = to.left + to.width / 2;
+    const y1 = to.top + to.height / 2;
+    const center = 'translate(-50%,-50%)';
+    el.animate(
+      [{ transform: `translate(${x0}px,${y0}px) ${center} scale(.7)`, opacity: 0 },
+       { transform: `translate(${x0}px,${y0 - 14}px) ${center} scale(1.1)`, opacity: 1, offset: .25 },
+       { transform: `translate(${x1}px,${y1}px) ${center} scale(.8)`, opacity: .9 }],
+      { duration: 900, delay: i * 140, easing: 'cubic-bezier(.4,.1,.3,1)', fill: 'both' }
+    ).finished.then(() => el.remove()).catch(() => el.remove());
+  });
+}
+
+function buzz(loss){
+  if (!MUTED && navigator.vibrate) navigator.vibrate(loss >= 1000 ? [70, 40, 70] : 30);
+}
+
+/* =========================================================
+   TASK LOGIC
+   ========================================================= */
+async function pick(deckId){
+  if (state.busy || state.finished) return;
+  state.busy = true;
+  try {
+    const choiceTimeMs = Math.round(performance.now() - state.readyAt);
+    const card = drawFrom(deckId);
+    const net = card.win - card.loss;
+    const trialNo = state.completed + 1;
+    state.picks[deckId] += 1;
+
+    els.app.classList.add('busy');
+    deckEls[deckId].btn.classList.add('active');
+    deckEls[deckId].win.textContent  = '+' + fmt(card.win);
+    deckEls[deckId].loss.textContent = card.loss ? '\u2212' + fmt(card.loss) : '';
+    // single outcome: centre it; win + loss: stack them
+    deckEls[deckId].win.setAttribute('y', card.loss ? '104' : '116');
+
+    playFlip();
+    await flip(deckId, true);
+
+    // ---- outcome lands ----
+    const before = state.balance;
+    state.balance += net;
+    tweenBalance(before, state.balance);
+    flashBalance(net >= 0);
+    floatMoney(deckId, card.win, card.loss);
+    playWin(0);
+    if (card.loss){ playLoss(card.loss, 0.2); buzz(card.loss); }
+
+    els.lastWin.textContent  = fmt(card.win);
+    els.lastLoss.textContent = fmt(card.loss);
+    setStatus(
+      card.loss ? `You won ${fmt(card.win)} and lost ${fmt(card.loss)}.` : `You won ${fmt(card.win)}.`,
+      card.loss ? 'bad' : 'good'
+    );
+
+    // ---- record ----
+    const trial = {
+      sessionId: SESSION_ID,
+      timestamp: new Date().toISOString(),
+      trial: trialNo,
+      block: Math.floor((trialNo - 1) / CONFIG.blockSize) + 1,
+      deck: deckId,
+      deckPosition: state.deckOrder.indexOf(deckId) + 1,   // 1 = first/left-most slot
+      advantageous: DECKS[deckId].advantageous,
+      win: card.win,
+      loss: card.loss,
+      net,
+      balanceAfter: state.balance,
+      choiceTimeMs,                                         // time from cards becoming available to the tap
+      deckPickN: state.picks[deckId],                       // how many times this deck has been chosen so far
+    };
+    state.trials.push(trial);
+    onTrialComplete(trial);
+
+    await sleep(CONFIG.revealMs);
+    await flip(deckId, false);
+
+    deckEls[deckId].btn.classList.remove('active');
+    els.app.classList.remove('busy');
+    state.completed += 1;
+
+    if (state.completed >= CONFIG.numTrials){
+      state.finished = true;
+      playFinish();
+      setStatus('That was the last card.');
+      setTimeout(showSummary, 1100);
+    } else {
+      renderHud();
+      state.readyAt = performance.now();
+      state.busy = false;
+    }
+  } catch (err) {
+    console.error(err);
+    els.app.classList.remove('busy');
+    state.busy = false;
+  }
+}
+
+function summarise(){
+  const picks = { A:0, B:0, C:0, D:0 };
+  const nBlocks = Math.ceil(CONFIG.numTrials / CONFIG.blockSize);
+  const blocks = Array.from({ length: nBlocks }, () => ({ A:0, B:0, C:0, D:0 }));
+  state.trials.forEach(t => { picks[t.deck]++; blocks[t.block - 1][t.deck]++; });
+  const score = (p) => (p.C + p.D) - (p.A + p.B);
+  return {
+    picks, blocks,
+    netScore: score(picks),
+    blockNetScores: blocks.map(score),
+    goodPct: state.trials.length ? Math.round(100 * (picks.C + picks.D) / state.trials.length) : 0,
+  };
+}
+
+function showSummary(){
+  const s = summarise();
+
+  els.sumBalance.textContent = fmt(state.balance);
+  els.sumNet.textContent = (s.netScore > 0 ? '+' : s.netScore < 0 ? '\u2212' : '') + Math.abs(s.netScore);
+  els.sumGood.textContent = s.goodPct + '%';
+  els.sumSub.textContent = CONFIG.showResultsToParticipant
+    ? `All ${CONFIG.numTrials} cards played. Here is how the session went.`
+    : 'All cards played. Thank you for taking part.';
+  els.sumDetail.style.display = CONFIG.showResultsToParticipant ? '' : 'none';
+
+  const cell = (v) => `<td class="${v > 0 ? 'pos' : v < 0 ? 'neg' : ''}">${v > 0 ? '+' : v < 0 ? '\u2212' : ''}${Math.abs(v)}</td>`;
+  els.logBody.innerHTML = s.blocks.map((b, i) =>
+    `<tr><td>${i + 1}</td><td>${b.A}</td><td>${b.B}</td><td>${b.C}</td><td>${b.D}</td>${cell(s.blockNetScores[i])}</tr>`
+  ).join('') +
+    `<tr class="total"><td>All</td><td>${s.picks.A}</td><td>${s.picks.B}</td><td>${s.picks.C}</td><td>${s.picks.D}</td>${cell(s.netScore)}</tr>`;
+
+  const session = {
+    sessionId: SESSION_ID,
+    trials: state.trials,
+    finalBalance: state.balance,
+    netScore: s.netScore,
+    blockNetScores: s.blockNetScores,
+    picks: s.picks,
+  };
+  window.__igtSession = session;
+
+  show('summary');
+  window.scrollTo(0, 0);
+  onSessionComplete(session);
+}
+
+/* =========================================================
+   VIEWS + EVENTS
+   ========================================================= */
+function show(view){
+  els.introView.style.display   = view === 'intro'   ? 'flex'  : 'none';
+  els.app.style.display         = view === 'app'     ? 'flex'  : 'none';
+  els.summaryView.style.display = view === 'summary' ? 'block' : 'none';
+}
+
+function startTask(){
+  buildDecks();
+  renderHud();
+  els.lastWin.textContent = '\u2014';
+  els.lastLoss.textContent = '\u2014';
+  setStatus('Choose a card from any deck.');
+  show('app');
+  state.readyAt = performance.now();
+  try { ctx(); } catch (e) { /* audio unavailable: carry on silently */ }
+}
+
+els.btnStart.addEventListener('click', startTask);
+
+els.btnCopyJson.addEventListener('click', async () => {
+  const text = JSON.stringify(window.__igtSession, null, 2);
+  try {
+    await navigator.clipboard.writeText(text);
+    els.copyHint.textContent = 'Copied to clipboard.';
+  } catch (e) {
+    els.copyHint.textContent = 'Copy failed. See window.__igtSession in the console.';
+  }
+  setTimeout(() => { els.copyHint.textContent = 'window.__igtSession holds the full trial log'; }, 2200);
+});
+
+els.btnRestart.addEventListener('click', () => {
+  SESSION_ID = newSessionId();
+  RUN_ID = newRunId();
+  state = freshState();
+  els.balance.classList.remove('neg', 'flash-up', 'flash-down');
+  show('intro');
+  window.scrollTo(0, 0);
+});
+
+/* End-screen buttons: Continue (waits until the answers are saved) and, optionally, Run again */
+(function wireEnd(){
+  const next = document.getElementById('btnNext');
+  const again = document.getElementById('btnRestart');
+  if (!CONFIG.allowRunAgain) again.style.display = 'none';
+  if (!CONFIG.nextPage){
+    next.style.display = 'none';
+    const note = document.createElement('p');
+    note.className = 'hint';
+    note.textContent = CONFIG.sheetWebhookUrl ? 'Saving your answers\u2026' : 'That was the last task. Thank you for taking part.';
+    next.parentNode.insertBefore(note, next);
+    window.__endNote = note;
+    return;
+  }
+  next.style.display = '';
+  next.addEventListener('click', async () => {
+    next.disabled = true;
+    next.textContent = 'Saving your answers\u2026';
+    await logDrain(4000);            // normally instant; if the connection is bad we move on and keep retrying on the next page
+    window.location.href = CONFIG.nextPage + '?sid=' + encodeURIComponent(SESSION_ID) + '&mute=' + (MUTED ? '1' : '0');
+  });
+})();
+
+/* init */
+els.introStart.textContent = fmt(CONFIG.startingBalance);
+renderHud();
+show('intro');
+</script>
+
+</body>
+</html>
