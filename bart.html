@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="only light">
+<meta name="supported-color-schemes" content="light">
+<title>BART — Balloon Analogue Risk Task</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    color-scheme: light;
+    color-scheme: only light;
+    --sky:#D8E8F3;
+    --paper:#F7F4EC;
+    --ink:#14213A;
+    --ink-soft:#52617C;
+    --balloon:#E5533D;
+    --balloon-dark:#B93A28;
+    --green:#2B8A57;
+    --green-dark:#1F6B42;
+    --bad:#C0301C;
+    --line:rgba(20,33,58,.14);
+    --font:'Bricolage Grotesque', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+  html,body{ height:100%; margin:0; }
+  body{
+    font-family:var(--font);
+    color:var(--ink);
+    background:var(--sky);
+    font-variant-numeric:tabular-nums;
+    -webkit-text-size-adjust:100%;
+  }
+
+  /* ---------- task screen: fills the whole viewport ---------- */
+  .app{
+    height:100vh;
+    height:100dvh;
+    display:flex;
+    flex-direction:column;
+    background:var(--sky);
+  }
+  .app.shake{ animation:shake .4s; }
+  @keyframes shake{
+    10%,90%{ transform:translateX(-2px); }
+    20%,80%{ transform:translateX(5px); }
+    30%,50%,70%{ transform:translateX(-9px); }
+    40%,60%{ transform:translateX(9px); }
+  }
+
+  .hud{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    padding:calc(14px + env(safe-area-inset-top)) 20px 6px;
+    position:relative;
+    z-index:2;
+  }
+  .hud-label{ display:block; font-size:13px; font-weight:500; color:var(--ink-soft); }
+  .hud-value{ display:block; font-size:26px; font-weight:700; line-height:1.1; }
+  .hud .right{ text-align:right; }
+  .hud .of{ font-weight:500; color:var(--ink-soft); font-size:20px; }
+
+  .stage{
+    position:relative;
+    flex:1;
+    min-height:0;           /* lets the flex child shrink so the SVG can scale to fit */
+    padding:4px 12px 0;
+    overflow:hidden;
+  }
+  #balloonSvg{
+    position:absolute;
+    inset:4px 12px 0 12px;
+    width:calc(100% - 24px);
+    height:calc(100% - 4px);
+    display:block;
+    overflow:visible;
+  }
+
+  .cloud{ position:absolute; background:#fff; opacity:.75; border-radius:999px; height:34px; width:120px; }
+  .cloud::before,.cloud::after{ content:""; position:absolute; background:#fff; border-radius:50%; }
+  .cloud::before{ width:56px; height:56px; left:18px; top:-26px; }
+  .cloud::after{ width:42px; height:42px; left:62px; top:-16px; }
+  .cloud.c1{ left:6%;  top:14%; }
+  .cloud.c2{ right:8%; top:30%; transform:scale(.8); }
+  .cloud.c3{ left:14%; top:62%; transform:scale(.6); opacity:.6; }
+
+  /* ---------- bottom dock: readouts + controls ---------- */
+  .dock{
+    background:var(--paper);
+    border-top:1px solid var(--line);
+    padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+  }
+  .dock-inner{ max-width:760px; margin:0 auto; display:grid; gap:12px; }
+
+  .status{
+    min-height:22px;
+    text-align:center;
+    font-size:16px;
+    font-weight:500;
+    color:var(--ink-soft);
+  }
+  .status.bad{ color:var(--bad); font-weight:600; }
+  .status.good{ color:var(--green-dark); font-weight:600; }
+
+  .readouts{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .readout{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:10px 14px;
+  }
+  .readout .lbl{ display:block; font-size:13px; font-weight:500; color:var(--ink-soft); }
+  .readout .val{ display:block; font-size:30px; font-weight:700; line-height:1.15; }
+
+  .buttons{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  button{
+    font-family:var(--font);
+    font-size:20px;
+    font-weight:700;
+    height:64px;
+    border:0;
+    border-radius:16px;
+    cursor:pointer;
+    color:#fff;
+    touch-action:manipulation;       /* no double-tap zoom on rapid pumping */
+    user-select:none; -webkit-user-select:none;
+    transition:transform .05s ease, filter .15s ease, opacity .15s ease;
+  }
+  button:active:not(:disabled){ transform:translateY(2px); }
+  button:disabled{ opacity:.38; cursor:not-allowed; }
+  button:focus-visible{ outline:3px solid var(--ink); outline-offset:3px; }
+  .btn-pump{ background:var(--ink); }
+  .btn-pump:hover:not(:disabled){ filter:brightness(1.25); }
+  .btn-collect{ background:var(--green); }
+  .btn-collect:hover:not(:disabled){ background:var(--green-dark); }
+
+  @media (max-height:560px){
+    .hud-value{ font-size:20px; }
+    .readout .val{ font-size:22px; }
+    button{ height:52px; font-size:18px; }
+    .status{ min-height:0; }
+  }
+
+  /* ---------- summary screen ---------- */
+  .summary{ display:none; min-height:100vh; min-height:100dvh; padding:32px 20px 48px; background:var(--sky); }
+  .summary-inner{ max-width:760px; margin:0 auto; }
+  .summary h1{ font-size:34px; margin:0 0 4px; letter-spacing:-.01em; }
+  .summary .sub{ margin:0 0 24px; color:var(--ink-soft); font-size:17px; }
+
+  .summary-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:24px; }
+  .stat{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:16px; }
+  .stat .val{ display:block; font-size:34px; font-weight:800; line-height:1.1; }
+  .stat .lbl{ display:block; margin-top:4px; font-size:14px; color:var(--ink-soft); font-weight:500; }
+  @media (max-width:520px){
+    .summary-grid{ grid-template-columns:1fr; }
+    .stat{ display:flex; align-items:baseline; justify-content:space-between; }
+    .stat .lbl{ margin-top:0; }
+  }
+
+  .table-wrap{ background:#fff; border:1px solid var(--line); border-radius:16px; overflow:hidden; margin-bottom:20px; }
+  table{ width:100%; border-collapse:collapse; font-size:16px; }
+  th,td{ text-align:left; padding:10px 16px; }
+  thead th{ background:var(--paper); font-size:13px; font-weight:600; color:var(--ink-soft); border-bottom:1px solid var(--line); }
+  tbody tr + tr td{ border-top:1px solid var(--line); }
+  td.pop{ color:var(--bad); font-weight:600; }
+  td.bank{ color:var(--green-dark); font-weight:600; }
+
+  .summary-actions{ display:grid; gap:12px; }
+  .btn-restart{ background:var(--ink); }
+  .btn-ghost{ background:transparent; color:var(--ink); border:2px solid var(--ink); height:52px; font-size:17px; }
+  .hint{ text-align:center; font-size:14px; color:var(--ink-soft); }
+
+  @media (prefers-reduced-motion: reduce){
+    .app.shake{ animation:none; }
+    *{ transition:none !important; }
+  }
+
+  /* ---------- touch safety + mute button ---------- */
+  .app{ -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  .mute{
+    display:grid; place-items:center;
+    width:42px; height:42px; padding:0;
+    margin:6px 0 0 auto;
+    border:1.5px solid var(--line);
+    border-radius:50%;
+    background:rgba(255,255,255,.6);
+    color:var(--ink);
+    cursor:pointer;
+    touch-action:manipulation;
+  }
+  .mute svg{ width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .mute .x{ display:none; }
+  .mute[aria-pressed="true"] .waves{ display:none; }
+  .mute[aria-pressed="true"] .x{ display:inline; }
+  .mute:focus-visible{ outline:3px solid var(--ink); outline-offset:2px; }
+  @media (max-height:560px){ .mute{ width:34px; height:34px; margin-top:4px; } .mute svg{ width:18px; height:18px; } }
+</style>
+</head>
+<body>
+
+<!-- ================= TASK ================= -->
+<div class="app" id="app">
+
+  <header class="hud">
+    <div>
+      <span class="hud-label">Balloon</span>
+      <span class="hud-value"><span id="trialNum">1</span> <span class="of">of <span id="trialTotal">20</span></span></span>
+    </div>
+    <div class="right">
+      <span class="hud-label">Banked</span>
+      <span class="hud-value" id="totalEarnings">$0.00</span>
+      <button class="mute" id="btnMute" type="button" aria-pressed="false" aria-label="Mute sound" title="Mute sound">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 H8 L13 5.5 V18.5 L8 14.5 H4 Z"/><path class="waves" d="M16 9 C 17.6 10.4, 17.6 13.6, 16 15"/><path class="waves" d="M18.8 6.6 C 21.6 9.4, 21.6 14.6, 18.8 17.4"/><path class="x" d="M16.5 9.5 L21.5 14.5 M21.5 9.5 L16.5 14.5"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="stage" id="stage">
+    <div class="cloud c1"></div>
+    <div class="cloud c2"></div>
+    <div class="cloud c3"></div>
+
+    <!-- viewBox is fixed; the balloon grows inside it and the whole thing scales to
+         whatever space the stage has, so it can never overflow on any screen. -->
+    <svg id="balloonSvg" viewBox="0 0 200 260" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+      <g id="burst"></g>
+      <g id="balloonG">
+        <path id="string" d="M100 224 C 92 234, 108 244, 100 258" fill="none" stroke="#52617C" stroke-width="1.6" stroke-linecap="round"/>
+        <path id="knot" d="M100 214 L94 225 L106 225 Z" fill="#B93A28"/>
+        <path id="balloonBody" d="" fill="#E5533D"/>
+        <ellipse id="balloonShine" cx="0" cy="0" rx="0" ry="0" fill="#fff" opacity=".32"/>
+      </g>
+    </svg>
+  </main>
+
+  <section class="dock">
+    <div class="dock-inner">
+      <div class="status" id="logLine">Pump to inflate, or collect your earnings.</div>
+      <div class="readouts">
+        <div class="readout"><span class="lbl">This balloon</span><span class="val" id="balloonEarnings">$0.00</span></div>
+        <div class="readout"><span class="lbl">Pumps</span><span class="val" id="pumpCount">0</span></div>
+      </div>
+      <div class="buttons">
+        <button class="btn-pump" id="btnPump">Pump</button>
+        <button class="btn-collect" id="btnCollect">Collect <span id="collectAmt">$0.00</span></button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ================= SUMMARY ================= -->
+<div class="summary" id="summaryView">
+  <div class="summary-inner">
+    <h1>Session complete</h1>
+    <p class="sub" id="sumSub">All balloons done. Here is how the session went.</p>
+
+    <div class="summary-grid">
+      <div class="stat"><span class="val" id="sumTotal">$0.00</span><span class="lbl">Total earned</span></div>
+      <div class="stat"><span class="val" id="sumAvgPumps">0</span><span class="lbl">Avg pumps (banked balloons)</span></div>
+      <div class="stat"><span class="val" id="sumPopped">0</span><span class="lbl">Balloons popped</span></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Balloon</th><th>Pumps</th><th>Outcome</th><th>Earned</th></tr></thead>
+        <tbody id="logBody"></tbody>
+      </table>
+    </div>
+
+    <div class="summary-actions">
+      <button class="btn-ghost" id="btnCopyJson">Copy session JSON</button>
+      <div class="hint" id="copyHint">window.__bartSession holds the full trial log</div>
+      <button class="btn btn-restart" id="btnNext" style="background:var(--green)">Continue to the next task</button>
+      <button class="btn-restart" id="btnRestart">Run again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   CONFIG
+   ========================================================= */
+const CONFIG = {
+  numBalloons: 20,
+  maxPossiblePumps: 128,   // breakpoint is drawn uniformly from 1..128
+  centsPerPump: 5,         // $0.05 per pump, standard BART payout
+
+  // Paste your Google Apps Script Web App URL here to log data to a Sheet.
+  // Leave blank to run purely local (data still lands in window.__bartSession).
+  sheetWebhookUrl: 'https://script.google.com/macros/s/AKfycbwkJ7Y27iKRwoU622JumLArOz6H1vG-X4MHbzoZ-ldQtYezL5zbU7yseV-r9Oy8tbBG/exec',
+
+  // Page opened by the "Continue" button on the end screen ('' hides the button).
+  // The session id travels with it (?sid=...), so one participant's rows from all
+  // three tasks share the same session_id in the Sheet.
+  nextPage: 'igt.html',
+
+  // The end screen offers \"Run again\" only if this is true. Leave it off for real participants.
+  allowRunAgain: false,
+};
+
+// One ID per run, so all rows from a single run can be grouped in the sheet.
+// It is regenerated on "Run again", so a second run never blends into the first.
+function newSessionId(){
+  return (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : 'session-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+}
+let SESSION_ID = (typeof location !== 'undefined' && new URLSearchParams(location.search).get('sid')) || newSessionId();
+
+/* =========================================================
+   SPREADSHEET / EXTERNAL INTEGRATION
+   ========================================================= */
+function onTrialComplete(trial) {
+  sendToSheet({ task: 'bart', eventType: 'trial', ...trial });
+}
+
+function onSessionComplete(session) {
+  logReconcile(session);
+  sendToSheet({
+    task: 'bart',
+    eventType: 'session_summary',
+    sessionId: SESSION_ID,
+    timestamp: new Date().toISOString(),
+    totalBalloons: CONFIG.numBalloons,
+    totalEarned: session.totalEarned,
+    avgPumpsBanked: session.avgPumpsBanked,
+    poppedCount: session.poppedCount,
+  });
+}
+
+/* =========================================================
+   RELIABLE LOGGING
+   Every row gets a unique rowId and waits in a queue that is also saved in the
+   browser. Rows are sent in batches, one request at a time, and leave the queue
+   only when the server confirms it stored them. Anything else is retried with
+   growing delays, including after a reload or on the next task page. The server
+   ignores rowIds it already has, so a retry can never create a duplicate row.
+   ========================================================= */
+const BUILD = '2026-10-24b';          // shows up in the sheet (page_build) so you can see which version each participant ran
+const TASK_NAME = 'bart';
+const LOG = {
+  key: 'taskLog.queue.v1', queue: [], sending: false, fails: 0, readFails: 0, blind: false,
+  timer: null, lastAttempt: 0,
+  batchSize: 40, timeoutMs: 40000, baseDelayMs: 1500, maxDelayMs: 30000,
+};
+function newRunId(){ return Math.random().toString(36).slice(2, 10); }
+let RUN_ID = newRunId();            // new on every page load / run, so a replay is never mistaken for a duplicate
+
+function logSave(){ try { localStorage.setItem(LOG.key, JSON.stringify(LOG.queue)); } catch (e) {} }
+function logLoad(){
+  try {
+    const saved = JSON.parse(localStorage.getItem(LOG.key) || '[]');
+    if (Array.isArray(saved)) saved.forEach(p => {
+      if (p && p.rowId && !LOG.queue.some(q => q.rowId === p.rowId)) LOG.queue.push(p);
+    });
+  } catch (e) {}
+}
+function rowKey(p){
+  return [p.sessionId, RUN_ID, p.task, p.eventType, (p.balloonIndex ?? p.trial ?? 'summary')].join('|');
+}
+
+function sendToSheet(payload) {
+  if (!CONFIG.sheetWebhookUrl) return;
+  payload.build = BUILD;
+  payload.rowId = rowKey(payload);
+  if (!LOG.queue.some(q => q.rowId === payload.rowId)) LOG.queue.push(payload);
+  logSave();
+  logFlush();
+}
+
+async function logPost(batch){
+  const body = JSON.stringify({ batch });
+  const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  const t = ctl ? setTimeout(() => ctl.abort(), LOG.timeoutMs) : null;
+  try {
+    const opts = {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // plain text avoids a CORS preflight Apps Script can't answer
+      body,
+    };
+    if (ctl) opts.signal = ctl.signal;
+    if (LOG.blind){                                              // fallback: reply can't be read, so "sent" counts as success
+      opts.mode = 'no-cors';
+      await fetch(CONFIG.sheetWebhookUrl, opts);
+      return { ok: true };
+    }
+    const res = await fetch(CONFIG.sheetWebhookUrl, opts);
+    const data = await res.json();                               // throws if the reply is not readable JSON
+    LOG.readFails = 0;
+    // Only a reply that proves the NEW script handled this exact batch counts as saved. An outdated script
+    // answers {status:'ok'} to anything, which would make the page throw its data away.
+    const confirmed = !!data && data.status === 'ok' && data.v >= 2 && (data.stored + data.duplicates) === batch.length;
+    if (data && data.status === 'ok' && !confirmed && !LOG.warned) {
+      LOG.warned = true;
+      console.warn('The logging endpoint is running an outdated script. Rows are being kept in the browser until it is updated.');
+    }
+    return { ok: confirmed };
+  } finally { if (t) clearTimeout(t); }
+}
+
+async function logFlush(){
+  if (!CONFIG.sheetWebhookUrl || LOG.sending || !LOG.queue.length) return;
+  LOG.sending = true;
+  LOG.lastAttempt = Date.now();
+  const batch = LOG.queue.slice(0, LOG.batchSize);
+  let ok = false, threw = false;
+  try { ok = (await logPost(batch)).ok; } catch (e) { threw = true; }
+  LOG.sending = false;
+  if (ok){
+    const sent = new Set(batch.map(p => p.rowId));
+    LOG.queue = LOG.queue.filter(p => !sent.has(p.rowId));
+    LOG.fails = 0;
+    logSave();
+    if (LOG.queue.length) logFlush();
+    return;
+  }
+  LOG.fails++;
+  if (threw && !LOG.blind){
+    LOG.readFails++;
+    // Several unreadable replies in a row while the device is online: the browser probably can't read
+    // the server's reply at all. Fall back to send-and-assume (plus the end-of-run re-send below).
+    if (LOG.readFails >= 3 && navigator.onLine !== false) LOG.blind = true;
+  }
+  const wait = Math.min(LOG.maxDelayMs, LOG.baseDelayMs * Math.pow(2, Math.min(LOG.fails - 1, 5)));
+  clearTimeout(LOG.timer);
+  LOG.timer = setTimeout(logFlush, wait);
+}
+
+function logDrain(maxMs){            // resolves true when everything is saved, false if time ran out
+  return new Promise(resolve => {
+    const t0 = Date.now();
+    (function check(){
+      if (!LOG.queue.length) return resolve(true);
+      if (Date.now() - t0 > maxMs) return resolve(false);
+      if (!LOG.sending && Date.now() - LOG.lastAttempt > 800) logFlush();
+      setTimeout(check, 200);
+    })();
+  });
+}
+
+function logBeacon(){                // last-chance send when the page is being hidden or closed
+  if (!CONFIG.sheetWebhookUrl || !LOG.queue.length || !navigator.sendBeacon) return;
+  try {
+    navigator.sendBeacon(CONFIG.sheetWebhookUrl,
+      new Blob([JSON.stringify({ batch: LOG.queue.slice(0, LOG.batchSize) })], { type: 'text/plain;charset=UTF-8' }));
+  } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') logBeacon(); else logFlush(); });
+window.addEventListener('pagehide', logBeacon);
+window.addEventListener('online', logFlush);
+logLoad();
+setTimeout(logFlush, 500);           // resend anything left over from an interrupted run or an earlier page
+
+/* At the end of a run, send every trial row once more. Rows the server already has are ignored
+   (matched by rowId), so this only fills in anything that never arrived. */
+function logReconcile(session){
+  (session.trials || []).forEach(t => sendToSheet({ task: TASK_NAME, eventType: 'trial', ...t }));
+  setTimeout(() => {                 // runs after the summary row has been queued too
+    if (CONFIG.nextPage) return;     // when a Continue button exists it waits for the queue itself
+    logDrain(20000).then((ok) => {
+      if (window.__endNote) window.__endNote.textContent = ok
+        ? 'Everything is saved. Thank you for taking part.'
+        : 'Your answers are still being saved. Please keep this page open for a few more seconds. Thank you for taking part.';
+    });
+  }, 0);
+}
+
+/* =========================================================
+   STATE
+   ========================================================= */
+let state = {
+  trialIndex: 0,
+  pumps: 0,
+  breakpoint: 0,
+  popped: false,
+  balloonEarningsCents: 0,
+  totalEarningsCents: 0,
+  balloonStartTime: 0,
+  trials: [],
+};
+
+const $ = (id) => document.getElementById(id);
+
+const els = {
+  app: $('app'),
+  trialNum: $('trialNum'),
+  trialTotal: $('trialTotal'),
+  totalEarnings: $('totalEarnings'),
+  balloonEarnings: $('balloonEarnings'),
+  balloonG: $('balloonG'),
+  balloonBody: $('balloonBody'),
+  balloonShine: $('balloonShine'),
+  burst: $('burst'),
+  pumpCount: $('pumpCount'),
+  logLine: $('logLine'),
+  btnPump: $('btnPump'),
+  btnCollect: $('btnCollect'),
+  collectAmt: $('collectAmt'),
+  logBody: $('logBody'),
+  summaryView: $('summaryView'),
+  sumSub: $('sumSub'),
+  sumTotal: $('sumTotal'),
+  sumAvgPumps: $('sumAvgPumps'),
+  sumPopped: $('sumPopped'),
+  btnCopyJson: $('btnCopyJson'),
+  copyHint: $('copyHint'),
+  btnRestart: $('btnRestart'),
+};
+
+els.trialTotal.textContent = CONFIG.numBalloons;
+
+/* =========================================================
+   RANDOMNESS
+   Uniform integer in [0, n) from the browser's CSPRNG, using rejection
+   sampling so there is no modulo bias for any n.
+   ========================================================= */
+function randInt(n){
+  const cryptoObj = (typeof crypto !== 'undefined' && crypto.getRandomValues) ? crypto : null;
+  if (!cryptoObj) return Math.floor(Math.random() * n); // very old browsers only
+  const limit = Math.floor(0x100000000 / n) * n;
+  const buf = new Uint32Array(1);
+  let x;
+  do { cryptoObj.getRandomValues(buf); x = buf[0]; } while (x >= limit);
+  return x % n;
+}
+
+function randomBreakpoint(){
+  // uniform over 1..maxPossiblePumps (classic BART: 1..128)
+  return 1 + randInt(CONFIG.maxPossiblePumps);
+}
+
+/* =========================================================
+   BALLOON GEOMETRY
+   Everything is drawn inside a fixed 200x260 viewBox with the knot
+   anchored at the bottom. Height at the maximum pump count is sized to
+   just fit the box, so the balloon cannot leave the stage at any pump
+   count or screen size.
+   ========================================================= */
+const GEO = { cx:100, yb:214, ryMin:12, ryMax:105, rxRatio:0.86 };
+
+function radiusFor(pumps){
+  const p = Math.min(pumps, CONFIG.maxPossiblePumps) / CONFIG.maxPossiblePumps;
+  return GEO.ryMin + (GEO.ryMax - GEO.ryMin) * p;   // linear: each pump adds the same size
+}
+
+function balloonPath(ry){
+  const rx = ry * GEO.rxRatio, cx = GEO.cx, yb = GEO.yb;
+  const f = (n) => n.toFixed(2);
+  return [
+    `M${f(cx)} ${f(yb)}`,
+    `C${f(cx-0.55*rx)} ${f(yb-0.10*ry)} ${f(cx-rx)} ${f(yb-0.55*ry)} ${f(cx-rx)} ${f(yb-1.10*ry)}`,
+    `C${f(cx-rx)} ${f(yb-1.65*ry)} ${f(cx-0.60*rx)} ${f(yb-2*ry)} ${f(cx)} ${f(yb-2*ry)}`,
+    `C${f(cx+0.60*rx)} ${f(yb-2*ry)} ${f(cx+rx)} ${f(yb-1.65*ry)} ${f(cx+rx)} ${f(yb-1.10*ry)}`,
+    `C${f(cx+rx)} ${f(yb-0.55*ry)} ${f(cx+0.55*rx)} ${f(yb-0.10*ry)} ${f(cx)} ${f(yb)}Z`,
+  ].join(' ');
+}
+
+function drawBalloon(pumps){
+  const ry = radiusFor(pumps), rx = ry * GEO.rxRatio;
+  els.balloonBody.setAttribute('d', balloonPath(ry));
+  const sx = GEO.cx - 0.45*rx, sy = GEO.yb - 1.5*ry;
+  const s = els.balloonShine;
+  s.setAttribute('cx', sx.toFixed(2));
+  s.setAttribute('cy', sy.toFixed(2));
+  s.setAttribute('rx', (0.10*rx).toFixed(2));
+  s.setAttribute('ry', (0.24*ry).toFixed(2));
+  s.setAttribute('transform', `rotate(-22 ${sx.toFixed(2)} ${sy.toFixed(2)})`);
+}
+
+function burstAt(pumps){
+  const ry = radiusFor(pumps), cx = GEO.cx, cy = GEO.yb - ry;
+  const ns = 'http://www.w3.org/2000/svg';
+  els.burst.innerHTML = '';
+
+  // expanding ring
+  const ring = document.createElementNS(ns, 'circle');
+  ring.setAttribute('r', ry.toFixed(1));
+  ring.setAttribute('fill', 'none');
+  ring.style.stroke = '#E5533D';
+  ring.setAttribute('stroke-width', '5');
+  els.burst.appendChild(ring);
+  ring.animate(
+    [{ transform:`translate(${cx}px,${cy}px) scale(.6)`, opacity:.9 },
+     { transform:`translate(${cx}px,${cy}px) scale(1.5)`, opacity:0 }],
+    { duration:450, easing:'ease-out', fill:'forwards' }
+  );
+
+  // flying shards
+  const n = 20;
+  for (let i = 0; i < n; i++){
+    const a = (i / n) * Math.PI * 2 + (Math.random() - .5) * .35;
+    const dist = ry * (1.0 + Math.random() * 0.9);
+    const size = 5 + Math.random() * 11;
+    const shard = document.createElementNS(ns, 'path');
+    shard.setAttribute('d', `M0 ${-size} L${size*.6} ${size*.6} L${-size*.6} ${size*.5} Z`);
+    shard.style.fill = (i % 3 === 0) ? '#B93A28' : '#E5533D';
+    els.burst.appendChild(shard);
+    shard.animate(
+      [{ transform:`translate(${cx}px,${cy}px) rotate(0deg) scale(1)`, opacity:1 },
+       { transform:`translate(${cx + Math.cos(a)*dist}px,${cy + Math.sin(a)*dist}px) rotate(${(Math.random()-.5)*720}deg) scale(.5)`, opacity:0 }],
+      { duration:620 + Math.random()*180, easing:'cubic-bezier(.12,.7,.3,1)', fill:'forwards' }
+    );
+  }
+}
+
+/* =========================================================
+   MUTE + TOUCH SAFETY
+   ========================================================= */
+let MUTED = (function(){
+  try {
+    const q = new URLSearchParams(location.search).get('mute');   // carried over from the previous task
+    if (q === '1') return true;
+    if (q === '0') return false;
+    return sessionStorage.getItem('task.muted') === '1';
+  } catch (e) { return false; }
+})();
+let masterGain = null;
+function dest(c){                       // every sound goes through this one volume control
+  if (!masterGain){ masterGain = c.createGain(); masterGain.gain.value = MUTED ? 0 : 1; masterGain.connect(c.destination); }
+  return masterGain;
+}
+const btnMute = document.getElementById('btnMute');
+function renderMute(){
+  btnMute.setAttribute('aria-pressed', MUTED ? 'true' : 'false');
+  btnMute.setAttribute('aria-label', MUTED ? 'Unmute sound' : 'Mute sound');
+  btnMute.setAttribute('title', MUTED ? 'Unmute sound' : 'Mute sound');
+}
+function setMuted(m){
+  MUTED = m;
+  if (masterGain) masterGain.gain.value = m ? 0 : 1;
+  try { sessionStorage.setItem('task.muted', m ? '1' : '0'); } catch (e) {}
+  if (!m) { try { ctx(); } catch (e) {} }          // unmuting is a tap, so it also unlocks audio on iOS
+  renderMute();
+}
+btnMute.addEventListener('click', () => setMuted(!MUTED));
+renderMute();
+
+/* Stop accidental double-tap zoom. CSS (touch-action) handles most browsers; this also covers
+   iOS Safari taps that land on text, empty space or a disabled button. A tap on a live button is
+   never touched, so rapid pumping / choosing is unaffected. Pinch-zoom stays available. */
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  const now = Date.now();
+  const btn = e.target && e.target.closest ? e.target.closest('button') : null;
+  if (now - lastTouchEnd < 350 && (!btn || btn.disabled)) e.preventDefault();
+  lastTouchEnd = now;
+}, { passive: false });
+
+/* =========================================================
+   SOUND (synthesized, no external assets)
+   ========================================================= */
+let audioCtx = null;
+function ctx(){
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended' && audioCtx.resume) audioCtx.resume();
+  return audioCtx;
+}
+
+function playPop(){
+  const c = ctx();
+  const bufferSize = c.sampleRate * 0.25;
+  const buffer = c.createBuffer(1, bufferSize, c.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 3);
+  }
+  const noise = c.createBufferSource();
+  noise.buffer = buffer;
+  const filter = c.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(1200, c.currentTime);
+  filter.frequency.exponentialRampToValueAtTime(80, c.currentTime + 0.2);
+  const gain = c.createGain();
+  gain.gain.setValueAtTime(0.5, c.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.25);
+  noise.connect(filter).connect(gain).connect(dest(c));
+  noise.start();
+}
+
+function playCollect(){
+  const c = ctx();
+  [0, 0.08].forEach((t, i) => {
+    const osc = c.createOscillator();
+    const gain = c.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = i === 0 ? 660 : 880;
+    gain.gain.setValueAtTime(0.001, c.currentTime + t);
+    gain.gain.linearRampToValueAtTime(0.15, c.currentTime + t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + t + 0.2);
+    osc.connect(gain).connect(dest(c));
+    osc.start(c.currentTime + t);
+    osc.stop(c.currentTime + t + 0.22);
+  });
+}
+
+function playPump(){
+  const c = ctx();
+  const osc = c.createOscillator();
+  const gain = c.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(180, c.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(240, c.currentTime + 0.05);
+  gain.gain.setValueAtTime(0.06, c.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.06);
+  osc.connect(gain).connect(dest(c));
+  osc.start();
+  osc.stop(c.currentTime + 0.07);
+}
+
+/* =========================================================
+   TASK LOGIC
+   A balloon with breakpoint b survives b-1 pumps; pump number b pops it.
+   (So breakpoint 1 pops on the very first pump, as in the original task.)
+   ========================================================= */
+function setStatus(text, kind){
+  els.logLine.className = 'status' + (kind ? ' ' + kind : '');
+  els.logLine.textContent = text;
+}
+
+function startBalloon(){
+  state.pumps = 0;
+  state.breakpoint = randomBreakpoint();
+  state.popped = false;
+  state.balloonEarningsCents = 0;
+  state.balloonStartTime = Date.now();
+  els.burst.innerHTML = '';
+  els.balloonG.style.opacity = 1;
+  setStatus('Pump to inflate, or collect your earnings.');
+  els.btnPump.disabled = false;
+  els.btnCollect.disabled = false;
+  render();
+}
+
+function render(){
+  els.trialNum.textContent = Math.min(state.trialIndex + 1, CONFIG.numBalloons);
+  els.totalEarnings.textContent = formatCents(state.totalEarningsCents);
+  els.balloonEarnings.textContent = formatCents(state.balloonEarningsCents);
+  els.collectAmt.textContent = formatCents(state.balloonEarningsCents);
+  // Deliberately no risk-coded indicator: breakpoints range up to 128 pumps
+  // (mean ~64), so anything that fills or reddens early would misstate the odds.
+  els.pumpCount.textContent = state.pumps;
+  if (!state.popped) drawBalloon(state.pumps);
+}
+
+function formatCents(c){
+  return '$' + (c / 100).toFixed(2);
+}
+
+function pump(){
+  if (state.popped) return;
+  state.pumps += 1;
+  playPump();
+
+  if (state.pumps >= state.breakpoint) {
+    pop();
+    return;
+  }
+
+  state.balloonEarningsCents += CONFIG.centsPerPump;
+  render();
+}
+
+function pop(){
+  state.popped = true;
+  els.btnPump.disabled = true;
+  els.btnCollect.disabled = true;
+  playPop();
+
+  burstAt(state.pumps - 1);            // burst from the last size the player actually saw
+  els.balloonG.style.opacity = 0;
+  els.app.classList.add('shake');
+  setTimeout(() => els.app.classList.remove('shake'), 420);
+  setStatus(`Popped on pump ${state.pumps}. ${formatCents(state.balloonEarningsCents)} lost.`, 'bad');
+
+  logTrial({ popped: true, earned: 0 });
+  setTimeout(nextBalloon, 1100);
+}
+
+function collect(){
+  if (state.popped) return;
+  playCollect();
+  state.totalEarningsCents += state.balloonEarningsCents;
+  els.btnPump.disabled = true;
+  els.btnCollect.disabled = true;
+  setStatus(`Collected ${formatCents(state.balloonEarningsCents)}.`, 'good');
+
+  logTrial({ popped: false, earned: state.balloonEarningsCents });
+  setTimeout(nextBalloon, 700);
+}
+
+function logTrial({ popped, earned }){
+  const now = Date.now();
+  const trial = {
+    sessionId: SESSION_ID,
+    timestamp: new Date(now).toISOString(),
+    balloonIndex: state.trialIndex + 1,
+    totalBalloons: CONFIG.numBalloons,
+    pumps: state.pumps,
+    popped,
+    outcome: popped ? 'popped' : 'banked',
+    breakpoint: state.breakpoint,        // the hidden pump limit this balloon rolled
+    earned: earned / 100,
+    cumulativeTotal: state.totalEarningsCents / 100,
+    decisionTimeMs: now - state.balloonStartTime,
+  };
+  state.trials.push(trial);
+  onTrialComplete(trial);
+  appendLogRow(trial);
+  render();
+}
+
+function appendLogRow(trial){
+  const tr = document.createElement('tr');
+  const cls = trial.popped ? 'pop' : 'bank';
+  tr.innerHTML = `
+    <td>${trial.balloonIndex}</td>
+    <td>${trial.pumps}</td>
+    <td class="${cls}">${trial.popped ? 'Popped' : 'Banked'}</td>
+    <td class="${cls}">${trial.popped ? '—' : '$' + trial.earned.toFixed(2)}</td>
+  `;
+  els.logBody.appendChild(tr);
+}
+
+function nextBalloon(){
+  state.trialIndex += 1;
+  if (state.trialIndex >= CONFIG.numBalloons) {
+    finishSession();
+    return;
+  }
+  startBalloon();
+}
+
+function finishSession(){
+  els.app.style.display = 'none';
+  els.summaryView.style.display = 'block';
+  window.scrollTo(0, 0);
+
+  const banked = state.trials.filter(t => !t.popped);
+  const poppedCount = state.trials.filter(t => t.popped).length;
+  const avgPumps = banked.length
+    ? Math.round(banked.reduce((s, t) => s + t.pumps, 0) / banked.length)
+    : 0;
+
+  els.sumSub.textContent = `All ${CONFIG.numBalloons} balloons done. Here is how the session went.`;
+  els.sumTotal.textContent = formatCents(state.totalEarningsCents);
+  els.sumAvgPumps.textContent = avgPumps;
+  els.sumPopped.textContent = `${poppedCount} of ${CONFIG.numBalloons}`;
+
+  const session = {
+    trials: state.trials,
+    totalEarned: state.totalEarningsCents / 100,
+    avgPumpsBanked: avgPumps,
+    poppedCount,
+  };
+  window.__bartSession = session;
+  onSessionComplete(session);
+}
+
+/* =========================================================
+   EVENTS
+   ========================================================= */
+els.btnPump.addEventListener('click', pump);
+els.btnCollect.addEventListener('click', collect);
+
+els.btnCopyJson.addEventListener('click', async () => {
+  const text = JSON.stringify(window.__bartSession, null, 2);
+  try {
+    await navigator.clipboard.writeText(text);
+    els.copyHint.textContent = 'Copied to clipboard.';
+  } catch (e) {
+    els.copyHint.textContent = 'Copy failed. See window.__bartSession in the console.';
+  }
+  setTimeout(() => { els.copyHint.textContent = 'window.__bartSession holds the full trial log'; }, 2200);
+});
+
+els.btnRestart.addEventListener('click', () => {
+  SESSION_ID = newSessionId();
+  RUN_ID = newRunId();
+  state = { trialIndex: 0, pumps: 0, breakpoint: 0, popped: false, balloonEarningsCents: 0, totalEarningsCents: 0, balloonStartTime: 0, trials: [] };
+  els.logBody.innerHTML = '';
+  els.summaryView.style.display = 'none';
+  els.app.style.display = 'flex';
+  startBalloon();
+});
+
+/* End-screen buttons: Continue (waits until the answers are saved) and, optionally, Run again */
+(function wireEnd(){
+  const next = document.getElementById('btnNext');
+  const again = document.getElementById('btnRestart');
+  if (!CONFIG.allowRunAgain) again.style.display = 'none';
+  if (!CONFIG.nextPage){
+    next.style.display = 'none';
+    const note = document.createElement('p');
+    note.className = 'hint';
+    note.textContent = CONFIG.sheetWebhookUrl ? 'Saving your answers\u2026' : 'That was the last task. Thank you for taking part.';
+    next.parentNode.insertBefore(note, next);
+    window.__endNote = note;
+    return;
+  }
+  next.style.display = '';
+  next.addEventListener('click', async () => {
+    next.disabled = true;
+    next.textContent = 'Saving your answers\u2026';
+    await logDrain(4000);            // normally instant; if the connection is bad we move on and keep retrying on the next page
+    window.location.href = CONFIG.nextPage + '?sid=' + encodeURIComponent(SESSION_ID) + '&mute=' + (MUTED ? '1' : '0');
+  });
+})();
+
+/* init */
+startBalloon();
+</script>
+
+</body>
+</html>
